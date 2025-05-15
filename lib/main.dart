@@ -5,8 +5,12 @@ import 'constants/colors.dart';
 import 'constants/supabase_config.dart';
 import 'providers/auth_provider.dart';
 import 'providers/service_provider.dart';
+import 'providers/storage_provider.dart';
+import 'providers/transaction_provider.dart';
 import 'services/auth_service.dart';
 import 'services/service_service.dart';
+import 'services/storage_service.dart';
+import 'services/transaction_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/register_screen.dart';
 import 'screens/home/home_screen.dart';
@@ -23,13 +27,16 @@ void main() async {
 
   final supabase = Supabase.instance.client;
   final authService = AuthService(supabase);
-
   final serviceService = ServiceService(supabase);
+  final storageService = StorageService(supabase);
+  final transactionService = TransactionService(supabase);
 
   runApp(
     MyApp(
       authService: authService,
       serviceService: serviceService,
+      storageService: storageService,
+      transactionService: transactionService,
     ),
   );
 }
@@ -37,11 +44,15 @@ void main() async {
 class MyApp extends StatelessWidget {
   final AuthService authService;
   final ServiceService serviceService;
+  final StorageService storageService;
+  final TransactionService transactionService;
 
   const MyApp({
     super.key,
     required this.authService,
     required this.serviceService,
+    required this.storageService,
+    required this.transactionService,
   });
 
   @override
@@ -53,6 +64,12 @@ class MyApp extends StatelessWidget {
         ),
         ChangeNotifierProvider(
           create: (_) => ServiceProvider(serviceService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => StorageProvider(storageService),
+        ),
+        ChangeNotifierProvider(
+          create: (_) => TransactionProvider(transactionService),
         ),
       ],
       child: MaterialApp(

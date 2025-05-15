@@ -47,7 +47,15 @@ class ServiceProvider extends ChangeNotifier {
 
   Future<Service?> getServiceById(String id) async {
     try {
-      return await _serviceService.getServiceById(id);
+      _isLoading = true;
+      _error = null;
+      notifyListeners();
+      
+      final service = await _serviceService.getServiceById(id);
+      
+      _isLoading = false;
+      notifyListeners();
+      return service;
     } catch (e) {
       _error = e.toString();
       notifyListeners();
@@ -68,10 +76,13 @@ class ServiceProvider extends ChangeNotifier {
   Future<Service?> createService(Map<String, dynamic> serviceData) async {
     try {
       _isLoading = true;
+      _error = null;
       notifyListeners();
 
       final service = await _serviceService.createService(serviceData);
-      _services.add(service);
+
+      // Refresh services list
+      await loadServices();
 
       _isLoading = false;
       notifyListeners();
@@ -88,12 +99,17 @@ class ServiceProvider extends ChangeNotifier {
   Future<Service?> updateService(String id, Map<String, dynamic> serviceData) async {
     try {
       _isLoading = true;
+      _error = null;
       notifyListeners();
 
       final service = await _serviceService.updateService(id, serviceData);
-      final index = _services.indexWhere((s) => s.id == id);
-      if (index != -1) {
-        _services[index] = service;
+
+      if (service != null) {
+        // Update service in list
+        final index = _services.indexWhere((s) => s.id == id);
+        if (index != -1) {
+          _services[index] = service;
+        }
       }
 
       _isLoading = false;
@@ -111,15 +127,19 @@ class ServiceProvider extends ChangeNotifier {
   Future<bool> deleteService(String id) async {
     try {
       _isLoading = true;
+      _error = null;
       notifyListeners();
 
-      await _serviceService.deleteService(id);
-      _services.removeWhere((service) => service.id == id);
+      final success = await _serviceService.deleteService(id);
+
+      if (success) {
+        // Remove service from list
+        _services.removeWhere((service) => service.id == id);
+      }
 
       _isLoading = false;
       notifyListeners();
-
-      return true;
+      return success;
     } catch (e) {
       _isLoading = false;
       _error = e.toString();

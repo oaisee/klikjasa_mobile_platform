@@ -4,6 +4,8 @@ class AppUser {
   final String name;
   final String role; // pengguna_jasa, penyedia_jasa, admin
   final double saldo;
+  final String? phoneNumber;
+  final String? profileImageUrl;
   
   AppUser({
     required this.id,
@@ -11,6 +13,8 @@ class AppUser {
     required this.name,
     required this.role,
     this.saldo = 0,
+    this.phoneNumber,
+    this.profileImageUrl,
   });
 
   factory AppUser.fromJson(Map<String, dynamic> json) {
@@ -20,6 +24,8 @@ class AppUser {
       name: json['name'] as String,
       role: json['role'] != null ? json['role'] as String : 'pengguna_jasa',
       saldo: json['saldo'] != null ? (json['saldo'] as num).toDouble() : 0.0,
+      phoneNumber: json['phone_number'] as String?,
+      profileImageUrl: json['profile_image_url'] as String?,
     );
   }
 
@@ -30,6 +36,8 @@ class AppUser {
       'name': name,
       'role': role,
       'saldo': saldo,
+      'phone_number': phoneNumber,
+      'profile_image_url': profileImageUrl,
     };
   }
 }

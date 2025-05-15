@@ -4,6 +4,10 @@ import '../../constants/colors.dart';
 import '../../models/user.dart';
 import '../../providers/auth_provider.dart';
 import '../../widgets/common/custom_button.dart';
+import 'edit_profile_screen.dart';
+import 'provider_registration_screen.dart';
+import 'topup_screen.dart';
+import 'transaction_history_screen.dart';
 
 class ProfileScreen extends StatelessWidget {
   const ProfileScreen({super.key});
@@ -95,7 +99,12 @@ class ProfileScreen extends StatelessWidget {
                     CustomButton(
                       text: 'Top Up Saldo',
                       onPressed: () {
-                        // TODO: Implement top up
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => const TopUpScreen(),
+                          ),
+                        );
                       },
                       isOutlined: true,
                     ),
@@ -105,35 +114,227 @@ class ProfileScreen extends StatelessWidget {
               const SizedBox(height: 24),
 
               // Menu Items
-              _MenuItem(
-                icon: Icons.person_outline,
-                title: 'Edit Profil',
+              InkWell(
                 onTap: () {
-                  // TODO: Navigate to edit profile
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const EditProfileScreen(),
+                    ),
+                  );
                 },
-              ),
-              if (user.role == 'pengguna_jasa')
-                _MenuItem(
-                  icon: Icons.work_outline,
-                  title: 'Daftar Penyedia Jasa',
-                  onTap: () {
-                    // TODO: Navigate to provider registration
-                  },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 2,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.person_outline, color: AppColors.primary),
+                      const SizedBox(width: 16),
+                      const Text(
+                        'Edit Profil',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
                 ),
-              _MenuItem(
-                icon: Icons.history,
-                title: 'Riwayat Transaksi',
-                onTap: () {
-                  // TODO: Navigate to transaction history
-                },
               ),
-              _MenuItem(
-                icon: Icons.settings_outlined,
-                title: 'Pengaturan',
+              const SizedBox(height: 8),
+              if (user.role == 'pengguna_jasa')
+                InkWell(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const ProviderRegistrationScreen(),
+                      ),
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(8),
+                      color: Colors.white,
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.grey.withOpacity(0.1),
+                          spreadRadius: 1,
+                          blurRadius: 2,
+                          offset: const Offset(0, 1),
+                        ),
+                      ],
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.work_outline, color: AppColors.primary),
+                        const SizedBox(width: 16),
+                        const Text(
+                          'Daftar Penyedia Jasa',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                        const Spacer(),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                  ),
+                ),
+              const SizedBox(height: 8),
+              InkWell(
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const TransactionHistoryScreen(),
+                    ),
+                  );
+                },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 2,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.history, color: AppColors.primary),
+                      const SizedBox(width: 16),
+                      const Text(
+                        'Riwayat Transaksi',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 8),
+              InkWell(
                 onTap: () {
                   // TODO: Navigate to settings
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Fitur pengaturan akan segera tersedia'),
+                      backgroundColor: AppColors.secondary,
+                    ),
+                  );
                 },
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    color: Colors.white,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 2,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.settings_outlined, color: AppColors.primary),
+                      const SizedBox(width: 16),
+                      const Text(
+                        'Pengaturan',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                      const Spacer(),
+                      const Icon(Icons.chevron_right),
+                    ],
+                  ),
+                ),
               ),
+              const SizedBox(height: 24),
+
+              // Logout Button
+              InkWell(
+                onTap: () async {
+                  // Konfirmasi logout
+                  final confirm = await showDialog<bool>(
+                    context: context,
+                    builder: (context) => AlertDialog(
+                      title: const Text('Konfirmasi'),
+                      content: const Text('Apakah Anda yakin ingin keluar?'),
+                      actions: [
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          child: const Text('Batal'),
+                        ),
+                        TextButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          child: const Text('Keluar', style: TextStyle(color: Colors.red)),
+                        ),
+                      ],
+                    ),
+                  );
+
+                  // Jika user mengkonfirmasi logout
+                  if (confirm == true && context.mounted) {
+                    try {
+                      await authProvider.signOut();
+                      // Navigasi ke halaman login setelah logout
+                      if (context.mounted) {
+                        Navigator.pushNamedAndRemoveUntil(
+                          context, 
+                          '/login', 
+                          (route) => false,
+                        );
+                      }
+                    } catch (e) {
+                      if (context.mounted) {
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text('Gagal keluar: ${e.toString()}'),
+                            backgroundColor: Colors.red,
+                          ),
+                        );
+                      }
+                    }
+                  }
+                },
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  margin: const EdgeInsets.symmetric(vertical: 8),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.red.shade300),
+                  ),
+                  child: const Center(
+                    child: Text(
+                      'Keluar',
+                      style: TextStyle(
+                        color: Colors.red,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              
               const SizedBox(height: 24),
 
               // Version Info
@@ -153,24 +354,34 @@ class ProfileScreen extends StatelessWidget {
   }
 }
 
-class _MenuItem extends StatelessWidget {
-  final IconData icon;
-  final String title;
+// Tombol logout di bagian bawah halaman
+class _LogoutButton extends StatelessWidget {
   final VoidCallback onTap;
 
-  const _MenuItem({
-    required this.icon,
-    required this.title,
-    required this.onTap,
-  });
+  const _LogoutButton({required this.onTap});
 
   @override
   Widget build(BuildContext context) {
-    return ListTile(
-      leading: Icon(icon, color: AppColors.primary),
-      title: Text(title),
-      trailing: const Icon(Icons.chevron_right),
+    return InkWell(
       onTap: onTap,
+      child: Container(
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        margin: const EdgeInsets.symmetric(vertical: 16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: Colors.red.shade300),
+        ),
+        child: const Center(
+          child: Text(
+            'Keluar',
+            style: TextStyle(
+              color: Colors.red,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ),
+      ),
     );
   }
 }
