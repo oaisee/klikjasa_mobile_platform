@@ -1,0 +1,879 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:klik_jasa/core/constants/app_colors.dart';
+import 'package:klik_jasa/features/common/auth/data/datasources/supabase_auth_remote_data_source.dart';
+import 'package:klik_jasa/features/common/auth/data/repositories/auth_repository_impl.dart';
+import 'package:klik_jasa/features/common/widgets/custom_snackbar.dart';
+import 'package:klik_jasa/features/provider_mode/store_settings/data/repositories/store_settings_repository_impl.dart';
+import 'package:klik_jasa/features/provider_mode/store_settings/domain/entities/store_settings_entity.dart';
+import 'package:klik_jasa/features/provider_mode/store_settings/domain/usecases/get_store_settings_usecase.dart';
+import 'package:klik_jasa/features/provider_mode/store_settings/domain/usecases/update_store_settings_usecase.dart';
+import 'package:klik_jasa/features/provider_mode/store_settings/domain/usecases/update_store_status_usecase.dart';
+import 'package:klik_jasa/features/provider_mode/store_settings/presentation/bloc/store_settings_bloc.dart';
+import 'package:klik_jasa/features/provider_mode/store_settings/presentation/bloc/store_settings_event.dart';
+import 'package:klik_jasa/features/provider_mode/store_settings/presentation/bloc/store_settings_state.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
+
+class StoreSettingsScreen extends StatefulWidget {
+  const StoreSettingsScreen({super.key});
+
+  @override
+  State<StoreSettingsScreen> createState() => _StoreSettingsScreenState();
+}
+
+class _StoreSettingsScreenState extends State<StoreSettingsScreen> {
+  StoreSettingsBloc? _storeSettingsBloc;
+  String? _currentUserId;
+  
+  // Nilai default yang akan diperbarui dari database
+  bool _storeActive = true;
+  bool _autoAcceptOrders = false;
+  bool _showDistance = true;
+  bool _receiveNotifications = true;
+  
+  // Jam operasional yang akan diisi dari database
+  Map<String, Map<String, dynamic>> _operationalHours = {
+    'Senin': {'isOpen': true, 'openTime': '08:00', 'closeTime': '17:00'},
+    'Selasa': {'isOpen': true, 'openTime': '08:00', 'closeTime': '17:00'},
+    'Rabu': {'isOpen': true, 'openTime': '08:00', 'closeTime': '17:00'},
+    'Kamis': {'isOpen': true, 'openTime': '08:00', 'closeTime': '17:00'},
+    'Jumat': {'isOpen': true, 'openTime': '08:00', 'closeTime': '17:00'},
+    'Sabtu': {'isOpen': true, 'openTime': '09:00', 'closeTime': '15:00'},
+    'Minggu': {'isOpen': false, 'openTime': '00:00', 'closeTime': '00:00'},
+  };
+  
+  // Lokasi toko dan radius layanan
+  String _storeAddress = '';
+  double _serviceRadius = 10.0;
+  
+  @override
+  void initState() {
+    super.initState();
+    _initializeBloc();
+  }
+  
+  Future<void> _initializeBloc() async {
+    final supabase = Supabase.instance.client;
+    final authRemoteDataSource = SupabaseAuthRemoteDataSource();
+    final authRepo = AuthRepositoryImpl(remoteDataSource: authRemoteDataSource);
+    
+    // Dapatkan ID pengguna saat ini
+    final user = await authRepo.getCurrentUser();
+    if (user == null) {
+      if (!mounted) return;
+      // Gagal mendapatkan user ID
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Error: Tidak dapat mendapatkan data pengguna')),
+      );
+      return;
+    }
+    
+    if (!mounted) return;
+    // Berhasil mendapatkan user ID
+    setState(() {
+      _currentUserId = user.id;
+    });
+    
+    // Inisialisasi repository dan use case
+    final repository = StoreSettingsRepositoryImpl(supabase: supabase);
+    final getStoreSettingsUseCase = GetStoreSettingsUseCase(repository);
+    final updateStoreSettingsUseCase = UpdateStoreSettingsUseCase(repository);
+    final updateStoreStatusUseCase = UpdateStoreStatusUseCase(repository);
+    
+    // Inisialisasi bloc
+    setState(() {
+      _storeSettingsBloc = StoreSettingsBloc(
+        getStoreSettings: getStoreSettingsUseCase,
+        updateStoreSettings: updateStoreSettingsUseCase,
+        updateStoreStatus: updateStoreStatusUseCase,
+      );
+    });
+    
+    // Muat pengaturan toko dari database
+    _storeSettingsBloc?.add(GetStoreSettingsEvent(providerId: user.id));
+  }
+  
+  @override
+  void dispose() {
+    // Pastikan bloc sudah diinisialisasi sebelum menutupnya
+    _storeSettingsBloc?.close();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_storeSettingsBloc == null) {
+      return Scaffold(
+        backgroundColor: Colors.white,
+        appBar: AppBar(
+          backgroundColor: AppColors.primary,
+          elevation: 0,
+          title: const Text('Pengaturan Toko', style: TextStyle(color: Colors.white)),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () => Navigator.of(context).pop(),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+    
+    return BlocProvider(
+      create: (context) => _storeSettingsBloc!,
+      child: BlocConsumer<StoreSettingsBloc, StoreSettingsState>(
+        listener: (context, state) {
+          if (state is StoreSettingsError) {
+            CustomSnackbar.show(
+              context: context,
+              message: state.message,
+              type: SnackbarType.error,
+            );
+          } else if (state is StoreSettingsUpdateSuccess) {
+            CustomSnackbar.show(
+              context: context,
+              message: state.message,
+              type: SnackbarType.success,
+            );
+          } else if (state is StoreSettingsLoaded) {
+            // Update UI dengan data dari database
+            setState(() {
+              _storeActive = state.settings.isStoreActive;
+              _autoAcceptOrders = state.settings.autoAcceptOrders;
+              _showDistance = state.settings.showDistance;
+              _receiveNotifications = state.settings.receiveNotifications;
+              _storeAddress = state.settings.storeAddress;
+              _serviceRadius = state.settings.serviceRadius;
+              
+              // Konversi operationalHours dari entity ke format UI
+              if (state.settings.operationalHours.isNotEmpty) {
+                state.settings.operationalHours.forEach((day, value) {
+                  _operationalHours[day] = {
+                    'isOpen': value.isOpen,
+                    'openTime': value.openTime,
+                    'closeTime': value.closeTime,
+                  };
+                });
+              }
+            });
+          }
+        },
+        builder: (context, state) {
+          return Scaffold(
+            backgroundColor: Colors.white,
+            appBar: AppBar(
+              title: const Text('Pengaturan Toko'),
+              elevation: 0,
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              leading: IconButton(
+                icon: const Icon(Icons.arrow_back_ios_new),
+                onPressed: () => Navigator.of(context).pop(),
+              ),
+              centerTitle: false,
+            ),
+            body: BlocConsumer<StoreSettingsBloc, StoreSettingsState>(
+              bloc: _storeSettingsBloc,
+              listener: (context, state) {
+                if (state is StoreSettingsLoaded) {
+                  // Update UI dengan data dari database
+                  setState(() {
+                    _storeActive = state.settings.isStoreActive;
+                    _autoAcceptOrders = state.settings.autoAcceptOrders;
+                    _showDistance = state.settings.showDistance;
+                    _receiveNotifications = state.settings.receiveNotifications;
+                    _storeAddress = state.settings.storeAddress;
+                    _serviceRadius = state.settings.serviceRadius;
+                    
+                    // Update jam operasional
+                    state.settings.operationalHours.forEach((day, hours) {
+                      _operationalHours[day] = {
+                        'isOpen': hours.isOpen,
+                        'openTime': hours.openTime,
+                        'closeTime': hours.closeTime,
+                      };
+                    });
+                  });
+                } else if (state is StoreSettingsUpdateSuccess) {
+                  // Tampilkan notifikasi sukses
+                  CustomSnackbar.show(
+                    context: context,
+                    message: state.message,
+                    type: SnackbarType.success,
+                  );
+                } else if (state is StoreSettingsUpdateError || state is StoreSettingsError) {
+                  // Tampilkan notifikasi error
+                  CustomSnackbar.show(
+                    context: context,
+                    message: state is StoreSettingsUpdateError
+                        ? (state as StoreSettingsUpdateError).message
+                        : (state as StoreSettingsError).message,
+                    type: SnackbarType.error,
+                  );
+                }
+              },
+              builder: (context, state) {
+                if (state is StoreSettingsInitial || state is StoreSettingsLoading) {
+                  return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                }
+                
+                return SingleChildScrollView(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildStoreStatusCard(),
+                      const SizedBox(height: 24),
+                      _buildGeneralSettings(),
+                      const SizedBox(height: 24),
+                      _buildOperationalHours(),
+                      const SizedBox(height: 24),
+                      _buildServiceAreaSettings(),
+                      const SizedBox(height: 24),
+                      _buildSaveButton(),
+                    ],
+                  ),
+                );
+              },
+            ),
+          );
+        },
+      ),
+    );
+  }
+  
+  Widget _buildStoreStatusCard() {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Status Toko',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 12,
+                      height: 12,
+                      decoration: BoxDecoration(
+                        color: _storeActive ? Colors.green : Colors.grey,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      _storeActive ? 'Aktif' : 'Nonaktif',
+                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                            fontWeight: FontWeight.w500,
+                          ),
+                    ),
+                  ],
+                ),
+                Switch(
+                  value: _storeActive,
+                  onChanged: (value) {
+                    if (_currentUserId != null) {
+                      // Update status toko di database
+                      _storeSettingsBloc?.add(UpdateStoreStatusEvent(
+                        providerId: _currentUserId!,
+                        isActive: value,
+                      ));
+                      
+                      // Update UI lokal
+                      setState(() {
+                        _storeActive = value;
+                      });
+                    } else {
+                      CustomSnackbar.show(
+                        context: context,
+                        message: 'Gagal memperbarui status toko: ID pengguna tidak ditemukan',
+                        type: SnackbarType.error,
+                      );
+                    }
+                  },
+                  activeColor: AppColors.primary,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              _storeActive
+                  ? 'Toko Anda terlihat oleh pelanggan dan dapat menerima pesanan.'
+                  : 'Toko Anda tidak terlihat oleh pelanggan dan tidak dapat menerima pesanan.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Colors.grey[600],
+                  ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildGeneralSettings() {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Pengaturan Umum',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            _buildSettingItem(
+              'Terima Pesanan Otomatis',
+              'Pesanan akan diterima secara otomatis tanpa perlu konfirmasi manual',
+              _autoAcceptOrders,
+              (value) {
+                if (_currentUserId != null) {
+                  // Update pengaturan auto-accept di database
+                  _storeSettingsBloc?.add(UpdateAutoAcceptOrdersEvent(
+                    providerId: _currentUserId!,
+                    autoAccept: value,
+                  ));
+                  
+                  // Update UI lokal
+                  setState(() {
+                    _autoAcceptOrders = value;
+                  });
+                } else {
+                  CustomSnackbar.show(
+                    context: context,
+                    message: 'Gagal memperbarui pengaturan: ID pengguna tidak ditemukan',
+                    type: SnackbarType.error,
+                  );
+                }
+              },
+            ),
+            const Divider(),
+            _buildSettingItem(
+              'Tampilkan Jarak ke Pelanggan',
+              'Menampilkan jarak antara lokasi Anda dan pelanggan',
+              _showDistance,
+              (value) {
+                if (_currentUserId != null) {
+                  // Update pengaturan tampilkan jarak di database
+                  _storeSettingsBloc?.add(UpdateShowDistanceEvent(
+                    providerId: _currentUserId!,
+                    showDistance: value,
+                  ));
+                  
+                  // Update UI lokal
+                  setState(() {
+                    _showDistance = value;
+                  });
+                } else {
+                  CustomSnackbar.show(
+                    context: context,
+                    message: 'Gagal memperbarui pengaturan: ID pengguna tidak ditemukan',
+                    type: SnackbarType.error,
+                  );
+                }
+              },
+            ),
+            const Divider(),
+            _buildSettingItem(
+              'Notifikasi Pesanan',
+              'Terima notifikasi saat ada pesanan baru',
+              _receiveNotifications,
+              (value) {
+                if (_currentUserId != null) {
+                  // Update pengaturan notifikasi di database
+                  _storeSettingsBloc?.add(UpdateReceiveNotificationsEvent(
+                    providerId: _currentUserId!,
+                    receiveNotifications: value,
+                  ));
+                  
+                  // Update UI lokal
+                  setState(() {
+                    _receiveNotifications = value;
+                  });
+                } else {
+                  CustomSnackbar.show(
+                    context: context,
+                    message: 'Gagal memperbarui pengaturan: ID pengguna tidak ditemukan',
+                    type: SnackbarType.error,
+                  );
+                }
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSettingItem(String title, String subtitle, bool value, Function(bool) onChanged) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontWeight: FontWeight.w500,
+                      ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  subtitle,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.grey[600],
+                      ),
+                ),
+              ],
+            ),
+          ),
+          Switch(
+            value: value,
+            onChanged: onChanged,
+            activeColor: AppColors.primary,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOperationalHours() {
+    return Card(
+      elevation: 1,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Jam Operasional',
+              style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.bold,
+                  ),
+            ),
+            const SizedBox(height: 16),
+            ..._operationalHours.entries.map((entry) {
+              final day = entry.key;
+              final data = entry.value;
+              return _buildOperationalHourItem(day, data);
+            }).toList(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOperationalHourItem(String day, Map<String, dynamic> data) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          SizedBox(
+            width: 80,
+            child: Text(
+              day,
+              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    fontWeight: FontWeight.w500,
+                  ),
+            ),
+          ),
+          Switch(
+            value: data['isOpen'],
+            onChanged: (value) {
+              if (_currentUserId != null) {
+                // Update status buka/tutup untuk hari tertentu di UI lokal
+                setState(() {
+                  _operationalHours[day]!['isOpen'] = value;
+                });
+                
+                // Update jam operasional di database
+                _updateOperationalHoursInDatabase(day);
+              } else {
+                CustomSnackbar.show(
+                  context: context,
+                  message: 'Gagal memperbarui jam operasional: ID pengguna tidak ditemukan',
+                  type: SnackbarType.error,
+                );
+              }
+            },
+            activeColor: AppColors.primary,
+          ),
+          Expanded(
+            child: data['isOpen']
+                ? Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      _buildTimeButton(context, data['openTime'], (time) {
+                        if (_currentUserId != null) {
+                          // Update jam buka di UI lokal
+                          setState(() {
+                            _operationalHours[day]!['openTime'] = time;
+                          });
+                          
+                          // Update jam operasional di database
+                          _updateOperationalHoursInDatabase(day);
+                        }
+                      }),
+                      const SizedBox(width: 8),
+                      const Text('-'),
+                      const SizedBox(width: 8),
+                      _buildTimeButton(context, data['closeTime'], (time) {
+                        if (_currentUserId != null) {
+                          // Update jam tutup di UI lokal
+                          setState(() {
+                            _operationalHours[day]!['closeTime'] = time;
+                          });
+                          
+                          // Update jam operasional di database
+                          _updateOperationalHoursInDatabase(day);
+                        }
+                      }),
+                    ],
+                  )
+                : const Text(
+                    'Tutup',
+                    textAlign: TextAlign.end,
+                    style: TextStyle(
+                      color: Colors.grey,
+                      fontStyle: FontStyle.italic,
+                    ),
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Helper method untuk memperbarui jam operasional di database
+  void _updateOperationalHoursInDatabase(String day) {
+    if (_currentUserId == null) return;
+    
+    // Konversi data jam operasional ke format entity
+    final operationalHour = OperationalHourEntity(
+      isOpen: _operationalHours[day]!['isOpen'],
+      openTime: _operationalHours[day]!['openTime'],
+      closeTime: _operationalHours[day]!['closeTime'],
+    );
+    
+    // Kirim event untuk memperbarui jam operasional di database
+    _storeSettingsBloc?.add(UpdateOperationalHoursEvent(
+      providerId: _currentUserId!,
+      day: day,
+      hours: operationalHour,
+    ));
+  }
+
+  Widget _buildTimeButton(BuildContext context, String time, Function(String) onTimeSelected) {
+    return TextButton(
+      onPressed: () async {
+        final TimeOfDay? selectedTime = await showTimePicker(
+          context: context,
+          initialTime: TimeOfDay(
+            hour: int.parse(time.split(':')[0]),
+            minute: int.parse(time.split(':')[1]),
+          ),
+        );
+        
+        if (selectedTime != null) {
+          final String formattedTime = '${selectedTime.hour.toString().padLeft(2, '0')}:${selectedTime.minute.toString().padLeft(2, '0')}';
+          onTimeSelected(formattedTime);
+        }
+      },
+      style: TextButton.styleFrom(
+        backgroundColor: Colors.grey[200],
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
+      child: Text(
+        time,
+        style: const TextStyle(fontSize: 16, color: Colors.black87),
+      ),
+    );
+  }
+
+  Widget _buildServiceAreaSettings() {
+    return Card(
+      elevation: 1,
+      margin: EdgeInsets.zero,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Area Layanan',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 16),
+            
+            // Alamat Toko
+            const Text(
+              'Alamat Toko',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.location_on, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      _storeAddress.isEmpty
+                          ? 'Belum ada alamat toko'
+                          : _storeAddress,
+                      style: TextStyle(
+                        color: _storeAddress.isEmpty ? Colors.grey : Colors.black87,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.edit, size: 20),
+                    onPressed: () {
+                      _showLocationEditDialog();
+                    },
+                    color: Colors.grey,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+            
+            // Radius Layanan
+            const Text(
+              'Radius Layanan',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Row(
+                children: [
+                  const Icon(Icons.radio_button_checked, color: Colors.grey),
+                  const SizedBox(width: 8),
+                  Text(
+                    '${_serviceRadius.toStringAsFixed(1)} km',
+                    style: const TextStyle(color: Colors.black87),
+                  ),
+                  const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      _showRadiusDialog();
+                    },
+                    child: const Text('Ubah'),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showRadiusDialog() {
+    double tempRadius = _serviceRadius;
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: const Text('Atur Radius Layanan'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                'Tentukan radius maksimum area layanan Anda dalam kilometer.',
+                style: TextStyle(fontSize: 14),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Text(
+                    '${tempRadius.toStringAsFixed(1)} km',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              Slider(
+                value: tempRadius,
+                min: 1.0,
+                max: 50.0,
+                divisions: 49,
+                label: '${tempRadius.toStringAsFixed(1)} km',
+                onChanged: (value) {
+                  setDialogState(() {
+                    tempRadius = value;
+                  });
+                },
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Batal'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _serviceRadius = tempRadius;
+                });
+                
+                if (_currentUserId != null) {
+                  // Update radius layanan di database
+                  _storeSettingsBloc?.add(UpdateServiceRadiusEvent(
+                    providerId: _currentUserId!,
+                    radius: _serviceRadius,
+                  ));
+                }
+                
+                Navigator.of(dialogContext).pop();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+              ),
+              child: const Text('Simpan'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSaveButton() {
+    return SizedBox(
+      width: double.infinity,
+      child: ElevatedButton(
+        onPressed: () {
+          if (_currentUserId != null) {
+            // Kumpulkan semua pengaturan toko
+            final settings = StoreSettingsEntity(
+              isStoreActive: _storeActive,
+              autoAcceptOrders: _autoAcceptOrders,
+              showDistance: _showDistance,
+              receiveNotifications: _receiveNotifications,
+              operationalHours: _operationalHours,
+              storeAddress: _storeAddress,
+              serviceRadius: _serviceRadius,
+            );
+            
+            // Kirim event untuk memperbarui semua pengaturan sekaligus
+            _storeSettingsBloc?.add(UpdateStoreSettingsEvent(
+              providerId: _currentUserId!,
+              settings: settings,
+            ));
+          }
+        },
+        style: ElevatedButton.styleFrom(
+          backgroundColor: AppColors.primary,
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        ),
+        child: const Text(
+          'Simpan Semua Perubahan',
+          style: TextStyle(fontSize: 16),
+        ),
+      ),
+    );
+  }
+  
+  // Fungsi untuk menampilkan dialog edit lokasi
+  void _showLocationEditDialog() {
+    TextEditingController addressController = TextEditingController(text: _storeAddress);
+    
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Edit Alamat Toko'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: addressController,
+              decoration: const InputDecoration(
+                labelText: 'Alamat Toko',
+                hintText: 'Masukkan alamat lengkap toko Anda',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Batal'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              setState(() {
+                _storeAddress = addressController.text;
+              });
+              
+              if (_currentUserId != null) {
+                // Update alamat toko di database
+                _storeSettingsBloc?.add(UpdateStoreLocationEvent(
+                  providerId: _currentUserId!,
+                  address: _storeAddress,
+                  latitude: 0.0, // Tambahkan nilai default atau gunakan nilai yang sebenarnya jika tersedia
+                  longitude: 0.0, // Tambahkan nilai default atau gunakan nilai yang sebenarnya jika tersedia
+                ));
+              }
+              
+              Navigator.of(dialogContext).pop();
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+            ),
+            child: const Text('Simpan'),
+          ),
+        ],
+      ),
+    );
+  }
